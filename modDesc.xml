@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<modDesc descVersion="98">
+    <author>Racc00n</author>
+    <version>0.1.0.0</version>
+
+    <iconFilename>icon_editablePastures.dds</iconFilename>
+
+    <title>
+        <en>Editable Pastures</en>
+    </title>
+
+    <description>
+        <en><![CDATA[Adding the ability to edit pastures after placement.]]></en>
+    </description>
+
+    <multiplayer supported="true"/>
+
+    <extraSourceFiles>
+        <sourceFile filename="scripts/EditablePastures.lua"/>
+    </extraSourceFiles>
+
+    <l10n>
+        <text name="ep_action_editPasture">
+            <en>Edit pasture (Editable Pastures)</en>
+        </text>
+        <text name="ep_editPasture">
+            <en>Edit pasture</en>
+        </text>
+        <text name="ep_openConstructionFirst">
+            <en>Open the construction menu (build mode), then use Edit pasture from the placeable dialog or stand near the barn.</en>
+        </text>
+    </l10n>
+</modDesc>
