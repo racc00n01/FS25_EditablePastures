@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="107">
     <author>Racc00n</author>
-    <version>0.0.1.0</version>
+    <version>0.0.1.1</version>
 
     <iconFilename>icon_editablePastures.dds</iconFilename>
 
@@ -16,7 +16,7 @@
     <multiplayer supported="true"/>
 
     <extraSourceFiles>
-        <sourceFile filename="scripts/EditablePastures.lua"/>
+        <sourceFile filename="scripts/main.lua"/>
     </extraSourceFiles>
 
     <l10n>
@@ -28,6 +28,18 @@
         </text>
         <text name="ep_openConstructionFirst">
             <en>Open the construction menu (build mode), then use Edit pasture from the placeable dialog or stand near the barn.</en>
+        </text>
+        <text name="ep_editDenied">
+            <en>Cannot edit this pasture right now.</en>
+        </text>
+        <text name="ep_editDeniedNotOwner">
+            <en>You do not own this pasture.</en>
+        </text>
+        <text name="ep_editDeniedBusy">
+            <en>Someone is already editing this pasture.</en>
+        </text>
+        <text name="ep_pastureTooSmall">
+            <en>Pasture is too small for the animals you currently have. Make the pasture bigger.</en>
         </text>
     </l10n>
 </modDesc>

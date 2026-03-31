@@ -1,10 +1,14 @@
 EditablePastures = {}
 EditablePastures.MOD_NAME = g_currentModName
+EditablePastures.BASE_DIRECTORY = g_currentModDirectory
+source(EditablePastures.BASE_DIRECTORY .. "scripts/events/EditablePasturesFenceCustomizeDeniedEvent.lua")
 EditablePastures.initialized = false
 EditablePastures.missionActive = false
 EditablePastures.actionEventId = nil
 EditablePastures.placeableInfoDialogPatched = false
 EditablePastures.startFenceCustomizationPatched = false
+EditablePastures.husbandryFenceCustomizeStartEventPatched = false
+EditablePastures.DEBUG_MP = false
 
 function EditablePastures.load()
     if EditablePastures.initialized then
@@ -25,6 +29,7 @@ function EditablePastures:onMissionLoaded()
     EditablePastures.missionActive = true
     EditablePastures.patchPlaceableInfoDialogOnce()
     EditablePastures.patchPlaceableHusbandryFenceStartCustomization()
+    EditablePastures.patchHusbandryFenceCustomizeStartEvent()
 end
 
 function EditablePastures:onMissionDeleted()
@@ -87,6 +92,73 @@ function EditablePastures.patchPlaceableHusbandryFenceStartCustomization()
     PlaceableHusbandryFence.startFenceCustomization = function(self, user, noEventSend)
         EditablePastures.prepareFenceForReEdit(self)
         return original(self, user, noEventSend)
+    end
+end
+
+-- Server-only: farm ownership and eligibility before HusbandryFenceCustomizeStartEvent broadcasts.
+function EditablePastures.validateFenceCustomizeStartServer(placeable, connection)
+    if placeable == nil or not placeable:getIsSynchronized() then
+        return false
+    end
+    if not EditablePastures.isEligibleForPastureEdit(placeable) then
+        return false
+    end
+    local mission = g_currentMission
+    if mission == nil then
+        return false
+    end
+    -- Internal server/broadcast paths may call run(connection) with no connection; keep base behaviour.
+    if connection == nil then
+        local spec = EditablePastures.getFenceSpec(placeable)
+        if spec ~= nil and spec.userIsCustomizing then
+            return false
+        end
+        return true
+    end
+    local playerFarmId = mission:getFarmId(connection)
+    local ownerFarmId = placeable:getOwnerFarmId()
+    if playerFarmId == nil or ownerFarmId == nil or playerFarmId ~= ownerFarmId then
+        if EditablePastures.DEBUG_MP then
+            Logging.devInfo("EditablePastures: rejected fence customize (farmId owner=%s player=%s)",
+                tostring(ownerFarmId), tostring(playerFarmId))
+        end
+        return false
+    end
+    local spec = EditablePastures.getFenceSpec(placeable)
+    if spec ~= nil and spec.userIsCustomizing then
+        if EditablePastures.DEBUG_MP then
+            Logging.devInfo("EditablePastures: rejected fence customize (already customizing)")
+        end
+        return false
+    end
+    return true
+end
+
+function EditablePastures.sendFenceCustomizeDeniedToClient(placeable, connection)
+    if placeable == nil or connection == nil or g_server == nil then
+        return
+    end
+    connection:sendEvent(EditablePasturesFenceCustomizeDeniedEvent.new(placeable))
+end
+
+function EditablePastures.patchHusbandryFenceCustomizeStartEvent()
+    if EditablePastures.husbandryFenceCustomizeStartEventPatched then
+        return
+    end
+    if HusbandryFenceCustomizeStartEvent == nil or HusbandryFenceCustomizeStartEvent.run == nil then
+        return
+    end
+    EditablePastures.husbandryFenceCustomizeStartEventPatched = true
+    local originalRun = HusbandryFenceCustomizeStartEvent.run
+    HusbandryFenceCustomizeStartEvent.run = function(self, connection)
+        local mission = g_currentMission
+        if mission ~= nil and mission:getIsServer() and self.placeable ~= nil then
+            if not EditablePastures.validateFenceCustomizeStartServer(self.placeable, connection) then
+                EditablePastures.sendFenceCustomizeDeniedToClient(self.placeable, connection)
+                return
+            end
+        end
+        originalRun(self, connection)
     end
 end
 
@@ -249,7 +321,6 @@ function EditablePastures.beginFenceCustomization(placeable, skipConstructionGui
     EditablePastures.patchPlaceableHusbandryFenceStartCustomization()
     EditablePastures.returnBrush = g_constructionScreen.brush
 
-    EditablePastures.prepareFenceForReEdit(placeable)
     placeable:startFenceCustomization(nil)
 
     local fence = placeable:getFence()
@@ -361,28 +432,6 @@ function EditablePastures.onCustomizableFenceFinished(placeable)
         end
         YesNoDialog.show(createMeadowCallback, nil,
             string.namedFormat(g_i18n:getText("ui_construction_createMeadow"), "placeableName", placeable:getName()))
-    end
-end
-
-function EditablePastures.onFenceEditRequestServer(placeable, connection)
-    local mission = g_currentMission
-    if mission == nil or not mission:getIsServer() then
-        return
-    end
-    if placeable == nil or not placeable:getIsSynchronized() then
-        return
-    end
-    if not EditablePastures.isEligibleForPastureEdit(placeable) then
-        return
-    end
-    local playerFarmId = g_currentMission:getFarmId(connection)
-    local ownerFarmId = placeable:getOwnerFarmId()
-    if playerFarmId == nil or ownerFarmId ~= playerFarmId then
-        return
-    end
-    local spec = EditablePastures.getFenceSpec(placeable)
-    if spec ~= nil and spec.userIsCustomizing then
-        return
     end
 end
 
