@@ -57,6 +57,53 @@ function EditablePasturesFenceRebuild.removeAllSegments(spec)
     fence.nextUniqueSegmentId = 1
 end
 
+--- Sum segment:getPrice() for unique segments about to be removed; credit owner farm (server only).
+--- Only runs when epFenceEditRefundEligible is set (after at least one successful customization), so the
+--- first post-placement customize does not refund the initial default fence the player did not buy per segment.
+function EditablePasturesFenceRebuild.refundRemovedFenceSegments(placeable)
+    if placeable == nil or not placeable.isServer then
+        return
+    end
+    local spec = placeable.spec_husbandryFence
+    if spec == nil or not spec.epFenceEditRefundEligible or spec.fence == nil then
+        return
+    end
+    local fence = spec.fence
+    local counted = {}
+    local total = 0
+    local function addSegment(segment)
+        if segment == nil or counted[segment] then
+            return
+        end
+        counted[segment] = true
+        if segment.getPrice ~= nil then
+            local p = segment:getPrice()
+            if p ~= nil and p > 0 then
+                total = total + p
+            end
+        end
+    end
+    for _, segment in ipairs(fence:getSegments()) do
+        addSegment(segment)
+    end
+    if spec.previewSegments ~= nil then
+        for _, segment in ipairs(spec.previewSegments) do
+            addSegment(segment)
+        end
+    end
+    if total <= 0 then
+        return
+    end
+    local farmId = placeable:getOwnerFarmId()
+    if farmId == nil or g_currentMission == nil then
+        return
+    end
+    local refund = math.floor(total + 0.5)
+    if g_currentMission.addMoney ~= nil then
+        g_currentMission:addMoney(refund, farmId, "other")
+    end
+end
+
 function EditablePasturesFenceRebuild.resetFenceToDefaultForCustomization(placeable)
     if placeable == nil or placeable.createDefaultFence == nil then
         return false
@@ -68,6 +115,7 @@ function EditablePasturesFenceRebuild.resetFenceToDefaultForCustomization(placea
 
     -- Replace the fence completely. Do not call restoreDefaultFence(): that path is for cancel/finishFenceCustomization.
     EditablePasturesFenceRebuild.clearFenceNodeCache(spec)
+    EditablePasturesFenceRebuild.refundRemovedFenceSegments(placeable)
     EditablePasturesFenceRebuild.removeAllSegments(spec)
     placeable:createDefaultFence()
     EditablePasturesFenceRebuild.finalizeNewDefaultFenceLikePlacement(spec)
@@ -152,6 +200,26 @@ function EditablePasturesShared.patchPlaceableHusbandryFenceTryFinalizeFence()
     end
 end
 
+function EditablePasturesShared.patchPlaceableHusbandryFenceFinishCustomization()
+    if EditablePasturesShared._finishFenceCustomizationPatched then
+        return
+    end
+    if PlaceableHusbandryFence == nil or PlaceableHusbandryFence.finishFenceCustomization == nil then
+        return
+    end
+    EditablePasturesShared._finishFenceCustomizationPatched = true
+    local original = PlaceableHusbandryFence.finishFenceCustomization
+    PlaceableHusbandryFence.finishFenceCustomization = function(self, user, success, noEventSend)
+        original(self, user, success, noEventSend)
+        if success and self.isServer then
+            local spec = self.spec_husbandryFence
+            if spec ~= nil then
+                spec.epFenceEditRefundEligible = true
+            end
+        end
+    end
+end
+
 function EditablePasturesShared.installOnce()
     if EditablePasturesShared._installed then
         return
@@ -159,6 +227,7 @@ function EditablePasturesShared.installOnce()
     EditablePasturesShared._installed = true
     EditablePasturesShared.patchPlaceableHusbandryFenceStartCustomization()
     EditablePasturesShared.patchPlaceableHusbandryFenceTryFinalizeFence()
+    EditablePasturesShared.patchPlaceableHusbandryFenceFinishCustomization()
 end
 
 EditablePasturesShared.installOnce()
